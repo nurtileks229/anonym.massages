@@ -1,0 +1,270 @@
+<!DOCTYPE html>
+<html lang="ky">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Айылдык Аноним</title>
+  <!-- Firebase скрипттери -->
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.22.0/firebase-firestore-compat.js"></script>
+  <style>
+    * { box-sizing: border-box; font-family: 'Segoe UI', sans-serif; }
+    body { margin: 0; background: linear-gradient(135deg, #0f2027, #203a43, #2c5364); color: #fff; }
+    .page { display: none; min-height: 100vh; padding: 40px; }
+    .active { display: block; }
+
+    h1, h2 { text-align: center; }
+    p { text-align: center; opacity: 0.9; }
+
+    .center { max-width: 700px; margin: auto; }
+
+    button {
+      padding: 12px 20px;
+      border: none;
+      border-radius: 12px;
+      background: #ff4b2b;
+      color: white;
+      font-size: 16px;
+      cursor: pointer;
+      transition: 0.3s;
+      margin: 5px;
+    }
+    button:hover { background: #ff6a4d; }
+
+    .card {
+      background: rgba(255,255,255,0.08);
+      border-radius: 16px;
+      padding: 20px;
+      margin: 15px 0;
+    }
+
+    textarea, input, select {
+      width: 100%;
+      padding: 12px;
+      border-radius: 10px;
+      border: none;
+      margin: 10px 0;
+      font-size: 15px;
+    }
+
+    .message-header {
+      font-weight: bold;
+      margin-bottom: 8px;
+      color: #ffd369;
+    }
+
+    .name-page {
+      max-width: 500px;
+      margin: 50px auto;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- 1-сахифе: Welcome -->
+  <div class="page active" id="welcome">
+    <div class="center">
+      <h1>Кош келиңиз 👋</h1>
+      <p>Бул сайтта сиз досторуңуз менен ачык же аноним ой бөлүшө аласыз.</p>
+      <p><b>Бул жерде баары коопсуз достор. Сөзүңүз талкууга салынбайт</b></p>
+      <div style="text-align:center; margin-top:40px;">
+        <button onclick="goTo('name')">Баштоо</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 2-сахифе: Атыңызды жазыңыз -->
+  <div class="page" id="name">
+    <div class="center name-page">
+      <h2>Өзүңүздү тааныштырыңыз</h2>
+      <div class="card">
+        <input type="text" id="userName" placeholder="Атыңыз" required>
+        <input type="number" id="userAge" placeholder="Жашыңыз" required>
+        <input type="text" id="userLocation" placeholder="Жашаган жериңиз" required>
+        <div style="text-align:center; margin-top:20px;">
+          <button onclick="saveUserInfo()">Кирүү</button>
+          <button onclick="goTo('welcome')" style="background:#2c5364;">Артка</button>
+
+          <p>Эскертүү!</p>
+          <p>Атынызды жазып киришиниз шарт, эгер анонимсиз билдирүү жиберсениз атыныз автоматтык түрдо жазылат.</p>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <!-- 3-сахифе: Негизги чат -->
+  <div class="page" id="main">
+    <div class="center">
+      <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:20px;">
+        <h2>Билдирүүлөр</h2>
+        <div>
+          <span id="currentUserName"></span>
+          <button onclick="goTo('name')" style="background:#2c5364;">Атын өзгөртүү</button>
+        </div>
+      </div>
+      
+      <div id="messages"></div>
+
+
+
+     <div class="card">
+        <h3>Жаңы билдирүү жазуу</h3>
+        <select id="mode">
+          <option value="anon">Анонимный</option>
+          <option value="name">Не анонимный</option>
+        </select>
+        <input type="text" id="name" placeholder="Атыңыз" style="display:none;" />
+        <textarea id="text" placeholder="Оюңузду жазыңыз..."></textarea>
+        <button onclick="addMessage()">Жарыялоо</button>
+      </div>
+
+<script>
+  // ==== FIREBASE КОНФИГУРАЦИЯСЫ ====
+  const firebaseConfig = {
+    apiKey: "AIzaSyARVtGnH1-xUk3fgKb_TmVfmqeFu706QSI",
+    authDomain: "anonmasages.firebaseapp.com",
+    projectId: "anonmasages",
+    storageBucket: "anonmasages.firebasestorage.app",
+    messagingSenderId: "916181623338",
+    appId: "1:916181623338:web:ef1f98e61bd29b6ee25953",
+    measurementId: "G-QC7KF9T4XB"
+  };
+
+  // ==== FIREBASE ИНИЦИАЛИЗАЦИЯ ====
+  firebase.initializeApp(firebaseConfig);
+  const db = firebase.firestore();
+
+  // ==== КОЛДОНУУЧУ МААЛЫМАТТАРЫ ====
+  let currentUser = {
+    name: '',
+    age: '',
+    location: ''
+  };
+
+  // ==== САХИФЕЛЕРДИ ӨЗГӨРТҮҮ ====
+  function goTo(page) {
+    document.querySelectorAll('.page').forEach(p => p.classList.remove('active'));
+    document.getElementById(page).classList.add('active');
+    
+    if (page === 'main') {
+      loadMessages();
+      document.getElementById('currentUserName').textContent = currentUser.name;
+    }
+  }
+
+  // ==== КОЛДОНУУЧУ МААЛЫМАТЫН САКТОО ====
+  function saveUserInfo() {
+    const name = document.getElementById('userName').value.trim();
+    const age = document.getElementById('userAge').value;
+    const location = document.getElementById('userLocation').value.trim();
+    
+    if (!name || !age || !location) {
+      alert('Бардык талааларды толтуруңуз!');
+      return;
+    }
+    
+    currentUser = { name, age, location };
+    
+    // LocalStorage'га сактоо (браузер жабылса да сакталат)
+    localStorage.setItem('chatUser', JSON.stringify(currentUser));
+    
+    goTo('main');
+  }
+
+  // ==== БРАУЗЕР ЖАБЫЛГАНДА ДА САКТАЛСЫН ====
+  window.onload = function() {
+    const savedUser = localStorage.getItem('chatUser');
+    if (savedUser) {
+      currentUser = JSON.parse(savedUser);
+      goTo('main');
+    }
+  };
+
+  // ==== БИЛДИРҮҮ КОШУУ ====
+  async function addMessage() {
+    if (!currentUser.name) {
+      alert('Алгач атыңызды жазыңыз!');
+      goTo('name');
+      return;
+    }
+    
+    const mode = document.getElementById('mode').value;
+    const text = document.getElementById('text').value;
+    
+    if (!text.trim()) {
+      alert('Бош билдирүү болбойт');
+      return;
+    }
+
+    try {
+      // Аноним же аноним эмес экенин текшерүү
+      const isAnonymous = mode === 'anon';
+      
+      // Firebase'ке сактоо
+      await db.collection('messages').add({
+        name: isAnonymous ? 'Аноним' : currentUser.name,
+        text: text,
+        timestamp: firebase.firestore.FieldValue.serverTimestamp(),
+        userInfo: {
+          name: currentUser.name,
+          age: currentUser.age,
+          location: currentUser.location
+        },
+        isAnonymous: isAnonymous,
+        realName: currentUser.name // Админ үчүн чыныгы аты
+      });
+
+      document.getElementById('text').value = '';
+      alert('Билдирүү ийгиликтүү жөнөтүлдү!');
+      
+    } catch (error) {
+      console.error('Ката:', error);
+      alert('Билдирүү жөнөтүү мүмкүн эмес. Интернетти текшериңиз.');
+    }
+  }
+
+  // ==== БИЛДИРҮҮЛӨРДҮ ЖҮКТӨӨ ====
+  function loadMessages() {
+    // Реалдуу убакытта көзөмөлдөө
+    db.collection('messages')
+      .orderBy('timestamp', 'desc')
+      .onSnapshot(snapshot => {
+        const messagesDiv = document.getElementById('messages');
+        messagesDiv.innerHTML = '';
+        
+        if (snapshot.empty) {
+          messagesDiv.innerHTML = '<div class="card">Билдирүүлөр жок. Биринчи болуп жазыңыз!</div>';
+          return;
+        }
+
+        snapshot.forEach(doc => {
+          const data = doc.data();
+          const card = document.createElement('div');
+          card.className = 'card';
+          
+          // Убакытты форматалоо
+          const time = data.timestamp?.toDate 
+            ? new Date(data.timestamp.toDate()).toLocaleString('ky-KG')
+            : 'Жаңы эле';
+          
+          // Жөнөкөй колдонуучуларга көрсөтүү
+          card.innerHTML = `
+            <div class="message-header">${data.name}</div>
+            <div>${data.text}</div>
+            <small style="opacity:0.7; display:block; margin-top:10px;">${time}</small>
+          `;
+          messagesDiv.appendChild(card);
+        });
+      }, error => {
+        console.error('Билдирүүлөрдү жүктөөдө ката:', error);
+        messagesDiv.innerHTML = '<div class="card">Билдирүүлөрдү жүктөө мүмкүн эмес.</div>';
+      });
+  }
+
+  // ==== САЙТ АЧЫЛГАНДА ====
+  document.addEventListener('DOMContentLoaded', function() {
+    console.log('Firebase инициализацияланды');
+  });
+</script>
+</body>
+</html>
